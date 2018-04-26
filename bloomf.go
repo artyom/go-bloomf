@@ -12,6 +12,8 @@ Licensed under the MIT License.
 package bloomf
 
 import (
+	"encoding/gob"
+	"io"
 	"math"
 )
 
@@ -126,6 +128,44 @@ func (bf *BF) Reset() {
 		bf.filter[i] = 0
 	}
 	bf.count = 0
+}
+
+// state holds fixed fields of BF; should be kept in sync with BF
+type state struct {
+	N      int       // capacity of the bloom filter
+	Count  int       // number of elements which have been inserted
+	M      uint32    // size of bit vector in bits
+	K      uint32    // distinct hash functions needed
+	Filter bitvector // our filter bit vector
+}
+
+// Dump saves bloom filter state to w
+func (bf *BF) Dump(w io.Writer) error {
+	st := state{
+		N:      bf.n,
+		Count:  bf.count,
+		M:      bf.m,
+		K:      bf.k,
+		Filter: bf.filter,
+	}
+	return gob.NewEncoder(w).Encode(st)
+}
+
+// Load restores bloom filter from r. It is expected that it was previously
+// saved with Dump and hasher is the same that was used to construct BF.
+func Load(r io.Reader, hasher func([]byte) uint64) (*BF, error) {
+	var st state
+	if err := gob.NewDecoder(r).Decode(&st); err != nil {
+		return nil, err
+	}
+	return &BF{
+		n:      st.N,
+		count:  st.Count,
+		m:      st.M,
+		k:      st.K,
+		filter: st.Filter,
+		hash:   hasher,
+	}, nil
 }
 
 // Internal routines for the bit vector
